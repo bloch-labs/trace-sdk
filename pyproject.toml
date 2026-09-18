@@ -9,7 +9,7 @@ description = "Python SDK for Bloch Trace."
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 authors = [{ name = "Bloch Labs" }]
-dependencies = []
+dependencies = ["httpx (>=0.28.1,<0.29.0)"]
 
 [tool.poetry]
 requires-poetry = "==2.4.3"
@@ -22,6 +22,7 @@ poetry-plugin-export = "==1.10.0"
 [tool.poetry.group.dev.dependencies]
 mypy = "==2.3.1"
 ruff = "==0.16.8"
+pytest = "9.1.1"
 
 [tool.ruff]
 target-version = "py311"
@@ -39,8 +40,12 @@ line-ending = "lf"
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src", "scripts"]
+files = ["src", "scripts", "tests"]
 strict = true
 pretty = true
 show_error_codes = true
 warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
