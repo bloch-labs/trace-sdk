@@ -1,0 +1,98 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_VERSION: "2.4.3"
+  POETRY_NO_INTERACTION: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  pr-title:
+    name: Conventional Commit PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+
+          pattern = r"(feat|fix|perf|docs|style|refactor|test|build|ci|chore|revert)(\([\w./-]+\))?!?: \S.*"
+          if not re.fullmatch(pattern, os.environ["PR_TITLE"]):
+              raise SystemExit("Use a Conventional Commit title, e.g. feat(client): add configuration")
+          PY
+
+  checks:
+    name: Checks (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: pipx install "poetry==$POETRY_VERSION"
+      - name: Select project interpreter
+        run: poetry env use "$(python -c 'import sys; print(sys.executable)')"
+      - name: Validate project and lockfile
+        run: poetry check --lock --strict
+      - name: Install locked dependencies
+        run: poetry sync --with dev
+      - name: Check exported runtime dependencies
+        run: |
+          poetry export --only main --format requirements.txt --output "$RUNNER_TEMP/requirements.txt"
+          diff -u requirements.txt "$RUNNER_TEMP/requirements.txt"
+      - name: Check formatting
+        run: poetry run ruff format --check .
+      - name: Lint
+        run: poetry run ruff check .
+      - name: Check types
+        run: poetry run mypy
+      - name: Build wheel and source distribution
+        run: poetry build
+      - name: Smoke-test installed wheel
+        run: poetry run python scripts/smoke_package.py
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [pr-title, checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to succeed
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          results = json.loads(os.environ["JOB_RESULTS"])
+          if any(job["result"] != "success" for job in results.values()):
+              raise SystemExit("A required CI job failed, was cancelled or was skipped.")
+          PY
