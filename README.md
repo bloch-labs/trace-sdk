@@ -14,6 +14,7 @@ poetry sync --with dev
 poetry run ruff format --check .
 poetry run ruff check .
 poetry run mypy
+poetry run pytest
 poetry build
 poetry run python scripts/smoke_package.py
 ```
