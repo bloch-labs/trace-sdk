@@ -7,6 +7,8 @@ from typing import Self
 
 import httpx
 
+from bloch_trace.runs import Runs
+
 
 def _validate_base_url(value: str) -> httpx.URL:
     if any(character.isspace() for character in value):
@@ -46,11 +48,12 @@ class TraceClient:
         self,
         *,
         # TODO:
-        # This will be set to production Bloch Trace once that is deployed and available.
-        # A user should not be able to change it.
+        # Default to the hosted API after deployment; retain an explicit override
+        # for local development, staging and testing.
         base_url: str,
         # TODO:
-        # This will also become mandatory, once auth is finalised
+        # Require a key for hosted usage once backend authentication exists.
+        # Unauthenticated development must remain an explicit, separate mode.
         api_key: str | None = None,
         timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
@@ -77,6 +80,12 @@ class TraceClient:
             follow_redirects=False,
             transport=transport,
         )
+        self._runs = Runs(self._http)
+
+    @property
+    def runs(self) -> Runs:
+        """Return the run operations associated with this client."""
+        return self._runs
 
     @property
     def base_url(self) -> str:
